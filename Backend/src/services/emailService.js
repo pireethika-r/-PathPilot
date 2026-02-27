@@ -25,7 +25,7 @@ export const sendMailjetEmail = async ({
   }
 
   const fromEmail = process.env.MAILJET_FROM_EMAIL;
-  const fromName = process.env.MAILJET_FROM_NAME || "PathPilot";
+  const fromName = process.env.MAILJET_FROM_NAME || "PathPilo";
   if (!fromEmail) {
     return { sent: false, reason: "missing_from_email" };
   }

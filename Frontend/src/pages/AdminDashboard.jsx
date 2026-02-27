@@ -82,16 +82,21 @@ export function AdminDashboard() {
     return 'danger';
   };
 
-  const handleStatusUpdate = async (status) => {
+  const handleStatusUpdate = async (status, reason = '') => {
     if (!selectedStudent) return;
     setIsUpdatingStatus(true);
     setApiError('');
 
     try {
-      const response = await fetch(`/api/admin/students/${selectedStudent.profileId}/status`, {
+      const endpoint =
+        status === 'Complete'
+          ? `/api/admin/students/${selectedStudent.profileId}/approve`
+          : `/api/admin/students/${selectedStudent.profileId}/request-update`;
+
+      const response = await fetch(endpoint, {
         method: 'PATCH',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ status })
+        body: JSON.stringify(status === 'Complete' ? {} : { reason })
       });
 
       const data = await response.json();
@@ -245,7 +250,7 @@ export function AdminDashboard() {
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-slate-900">{student.name}</div>
-                          <div className="text-sm text-slate-500">{student.id} • {student.email}</div>
+                          <div className="text-sm text-slate-500">{student.id} ï¿½ {student.email}</div>
                         </div>
                       </div>
                     </td>
@@ -302,7 +307,7 @@ export function AdminDashboard() {
                 </div>
                 <div>
                   <h4 className="text-xl font-bold text-slate-900">{selectedStudent.name}</h4>
-                  <p className="text-slate-500">{selectedStudent.id} • {selectedStudent.email}</p>
+                  <p className="text-slate-500">{selectedStudent.id} ï¿½ {selectedStudent.email}</p>
                 </div>
               </div>
               <div className="text-right">
@@ -373,7 +378,7 @@ export function AdminDashboard() {
 
             <div className="flex gap-3 pt-4 border-t border-slate-200">
               <button
-                onClick={() => handleStatusUpdate('Incomplete')}
+                onClick={() => { const reason = window.prompt('Enter reason for update request (optional):', '') || ''; handleStatusUpdate('Incomplete', reason); }}
                 disabled={isUpdatingStatus}
                 className="flex-1 bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-50 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
               >

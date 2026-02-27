@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { UploadCloudIcon, XIcon, PlusIcon, CheckCircleIcon, AlertCircleIcon, FileTextIcon } from 'lucide-react';
-import { ProfileProgressBar } from '../components/ProfileProgressBar';
 // Predefined lists
 const PREDEFINED_SKILLS = [
     'JavaScript',
@@ -426,12 +425,6 @@ export function StudentProfile() {
       </div>);
     }
     return (<div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-      <div className="mb-8 bg-white p-6 rounded-xl shadow-sm border border-slate-200 sticky top-20 z-10">
-        <ProfileProgressBar progress={progress}/>
-        <p className="text-xs text-slate-500 mt-2">
-          Complete your profile to increase your visibility to recruiters.
-        </p>
-      </div>
       {apiError &&
     <div className="mb-6 p-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm flex items-center">
           <AlertCircleIcon className="w-4 h-4 mr-2"/>

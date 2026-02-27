@@ -17,6 +17,10 @@ const buildAuthResponse = (user) => ({
   fullName: user.fullName,
   email: user.email,
   role: user.role,
+  phone: user.phone || "",
+  title: user.title || "",
+  bio: user.bio || "",
+  avatarUrl: user.avatarUrl || "",
 });
 
 export const register = async (req, res) => {
@@ -85,6 +89,10 @@ export const login = async (req, res) => {
     const user = await User.findOne({ email: normalizedEmail });
 
     if (!user) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
+
+    if (!user.password || typeof user.password !== "string") {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 

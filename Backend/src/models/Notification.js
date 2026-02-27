@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { emitNotificationToUser } from "../services/realtimeGateway.js";
 
 const notificationSchema = new mongoose.Schema(
   {
@@ -9,7 +10,7 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["interview", "system"],
+      enum: ["interview", "system", "payment", "achievement"],
       default: "system",
     },
     title: {
@@ -33,5 +34,17 @@ const notificationSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+notificationSchema.post("save", function pushRealtimeNotification(doc) {
+  emitNotificationToUser(doc.user, {
+    id: String(doc._id),
+    type: doc.type,
+    title: doc.title,
+    message: doc.message,
+    read: doc.read,
+    metadata: doc.metadata || {},
+    createdAt: doc.createdAt,
+  });
+});
 
 export const Notification = mongoose.model("Notification", notificationSchema);

@@ -15,7 +15,7 @@ const buildInterviewEmailHtml = ({ candidateName, date, time, message }) => `
               <tr>
                 <td style="background:linear-gradient(135deg,#0f172a,#1d4ed8);padding:24px 28px;">
                   <h1 style="margin:0;font-size:24px;line-height:1.2;color:#ffffff;">Interview Invitation</h1>
-                  <p style="margin:8px 0 0 0;font-size:14px;color:#dbeafe;">PathPilot Hiring Team</p>
+                  <p style="margin:8px 0 0 0;font-size:14px;color:#dbeafe;">PathPilo Hiring Team</p>
                 </td>
               </tr>
               <tr>
@@ -29,7 +29,7 @@ const buildInterviewEmailHtml = ({ candidateName, date, time, message }) => `
                       <td style="padding:16px 18px;">
                         <p style="margin:0 0 8px 0;font-size:14px;"><strong>Date:</strong> ${date}</p>
                         <p style="margin:0 0 8px 0;font-size:14px;"><strong>Time:</strong> ${time}</p>
-                        <p style="margin:0;font-size:14px;"><strong>Platform:</strong> PathPilot Interview Portal</p>
+                        <p style="margin:0;font-size:14px;"><strong>Platform:</strong> PathPilo Interview Portal</p>
                       </td>
                     </tr>
                   </table>
@@ -44,13 +44,13 @@ const buildInterviewEmailHtml = ({ candidateName, date, time, message }) => `
                   </p>
                   <p style="margin:18px 0 0 0;font-size:14px;line-height:1.6;">
                     Regards,<br/>
-                    <strong>PathPilot Hiring Team</strong>
+                    <strong>PathPilo Hiring Team</strong>
                   </p>
                 </td>
               </tr>
               <tr>
                 <td style="padding:14px 20px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b;text-align:center;">
-                  This is an automated email from PathPilot. Please do not reply directly.
+                  This is an automated email from PathPilo. Please do not reply directly.
                 </td>
               </tr>
             </table>
@@ -238,8 +238,8 @@ export const sendInterviewInvite = async (req, res) => {
     const emailResult = await sendMailjetEmail({
       toEmail: profile.email || "",
       toName: profile.fullName || profile.user.fullName || "Student",
-      subject: "Interview Invitation - PathPilot",
-      textPart: `Interview Invitation\n\nHi ${profile.fullName || profile.user.fullName || "Student"},\n\nYou have been invited for an interview.\nDate: ${date}\nTime: ${time}\n\nMessage:\n${message}\n\nRegards,\nPathPilot Hiring Team`,
+      subject: "Interview Invitation - PathPilo",
+      textPart: `Interview Invitation\n\nHi ${profile.fullName || profile.user.fullName || "Student"},\n\nYou have been invited for an interview.\nDate: ${date}\nTime: ${time}\n\nMessage:\n${message}\n\nRegards,\nPathPilo Hiring Team`,
       htmlPart: buildInterviewEmailHtml({
         candidateName: profile.fullName || profile.user.fullName || "Student",
         date,
