@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { SearchIcon, FilterIcon, EyeIcon, UsersIcon, CheckCircleIcon, ClockIcon, AwardIcon, AlertCircleIcon } from 'lucide-react';
+import { SearchIcon, FilterIcon, EyeIcon, UsersIcon, CheckCircleIcon, ClockIcon, AwardIcon, AlertCircleIcon, DownloadIcon, XCircleIcon } from 'lucide-react';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
 
@@ -116,6 +116,42 @@ export function AdminDashboard() {
       setApiError(error.message || 'Failed to update profile status');
     } finally {
       setIsUpdatingStatus(false);
+    }
+  };
+
+  const handleDownloadCv = async (student) => {
+    setApiError('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/admin/students/${student.profileId}/cv`, {
+        headers: {
+          Authorization: `Bearer ${token || ''}`
+        }
+      });
+
+      if (!response.ok) {
+        let message = 'Failed to download CV';
+        try {
+          const data = await response.json();
+          message = data.message || message;
+        } catch (_error) {
+          // Ignore parse errors for file responses.
+        }
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = student.cvName || 'student-cv';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      setApiError(error.message || 'Failed to download CV');
     }
   };
 
@@ -355,8 +391,20 @@ export function AdminDashboard() {
                       <p className="text-xs text-slate-500">
                         {selectedStudent.cvSize ? `${(selectedStudent.cvSize / 1024 / 1024).toFixed(2)} MB` : 'N/A'}
                       </p>
+                      {!selectedStudent.hasCvFile && selectedStudent.cvName && (
+                        <p className="text-xs text-amber-700 mt-1">Legacy profile: file is not available for download yet.</p>
+                      )}
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadCv(selectedStudent)}
+                    disabled={!selectedStudent.hasCvFile}
+                    className="inline-flex items-center px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <DownloadIcon className="w-4 h-4 mr-2" />
+                    Download
+                  </button>
                 </div>
               </div>
             </div>
@@ -382,11 +430,16 @@ export function AdminDashboard() {
                 disabled={isUpdatingStatus}
                 className="flex-1 bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-50 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                Request Update
+                {selectedStudent.status === 'Complete' ? (
+                  <span className="inline-flex items-center">
+                    <XCircleIcon className="w-4 h-4 mr-2" />
+                    Cancel Approval
+                  </span>
+                ) : 'Request Update'}
               </button>
               <button
                 onClick={() => handleStatusUpdate('Complete')}
-                disabled={isUpdatingStatus}
+                disabled={isUpdatingStatus || selectedStudent.status === 'Complete'}
                 className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 Approve Profile

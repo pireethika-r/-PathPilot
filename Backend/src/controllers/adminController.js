@@ -2,6 +2,12 @@ import { StudentProfile } from "../models/StudentProfile.js";
 import { User } from "../models/User.js";
 import { Notification } from "../models/Notification.js";
 import { Course } from "../models/Course.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const formatStudentId = (userId) => `STU-${String(userId).slice(-6).toUpperCase()}`;
 
@@ -20,6 +26,7 @@ const mapStudent = (profile) => ({
   interests: profile.interests || [],
   cvName: profile.cvName || "",
   cvSize: profile.cvSize || 0,
+  hasCvFile: Boolean(profile.cvFilePath),
 });
 
 const mapCourse = (course) => ({
@@ -187,6 +194,29 @@ export const requestStudentProfileUpdate = async (req, res) => {
       message: "Update request sent to student",
       student: mapStudent(profile),
     });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const downloadStudentCv = async (req, res) => {
+  try {
+    const profile = await getValidatedStudentProfile(req.params.profileId);
+    if (!profile) {
+      return res.status(404).json({ message: "Student profile not found" });
+    }
+
+    if (!profile.cvFilePath) {
+      return res.status(404).json({ message: "CV file not found for this student" });
+    }
+
+    const absolutePath = path.resolve(__dirname, "../../", profile.cvFilePath);
+    if (!fs.existsSync(absolutePath)) {
+      return res.status(404).json({ message: "CV file is unavailable" });
+    }
+
+    return res.download(absolutePath, profile.cvName || path.basename(absolutePath));
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Internal server error" });

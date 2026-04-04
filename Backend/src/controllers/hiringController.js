@@ -3,6 +3,12 @@ import { MarketInsight } from "../models/MarketInsight.js";
 import { Notification } from "../models/Notification.js";
 import { StudentProfile } from "../models/StudentProfile.js";
 import { sendMailjetEmail } from "../services/emailService.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const buildInterviewEmailHtml = ({ candidateName, date, time, message }) => `
   <!DOCTYPE html>
@@ -84,6 +90,7 @@ const formatCandidate = (profile, interactionMap) => {
     status,
     cvName: profile.cvName || "",
     cvSize: profile.cvSize || 0,
+    hasCvFile: Boolean(profile.cvFilePath),
   };
 };
 
@@ -118,6 +125,89 @@ const passesFilters = (candidate, query) => {
   }
 
   return true;
+};
+
+const mapInsight = (insight, currentEmployerId) => ({
+  id: String(insight._id),
+  careerField: insight.careerField || "",
+  demandLevel: insight.demandLevel || "Low",
+  skills: Array.isArray(insight.skills) ? insight.skills : [],
+  notes: insight.notes || "",
+  createdAt: insight.createdAt,
+  employerName: insight.employer?.fullName || "Employer",
+  isMine: String(insight.employer?._id || insight.employer) === String(currentEmployerId),
+});
+
+const buildMarketSummary = (insights) => {
+  const demandBreakdown = { High: 0, Medium: 0, Low: 0 };
+  const skillCounts = new Map();
+  const fieldCounts = new Map();
+  const employerIds = new Set();
+
+  insights.forEach((insight) => {
+    demandBreakdown[insight.demandLevel] = (demandBreakdown[insight.demandLevel] || 0) + 1;
+    employerIds.add(String(insight.employer?._id || insight.employer));
+
+    if (insight.careerField) {
+      fieldCounts.set(
+        insight.careerField,
+        (fieldCounts.get(insight.careerField) || 0) + 1
+      );
+    }
+
+    (Array.isArray(insight.skills) ? insight.skills : []).forEach((skill) => {
+      const normalizedSkill = String(skill).trim();
+      if (!normalizedSkill) return;
+      skillCounts.set(normalizedSkill, (skillCounts.get(normalizedSkill) || 0) + 1);
+    });
+  });
+
+  const sortCounts = (entryA, entryB) => {
+    if (entryB[1] !== entryA[1]) return entryB[1] - entryA[1];
+    return String(entryA[0]).localeCompare(String(entryB[0]));
+  };
+
+  return {
+    totalInsights: insights.length,
+    totalEmployers: employerIds.size,
+    demandBreakdown,
+    topSkills: Array.from(skillCounts.entries())
+      .sort(sortCounts)
+      .slice(0, 5)
+      .map(([label, count]) => ({ label, count })),
+    topCareerFields: Array.from(fieldCounts.entries())
+      .sort(sortCounts)
+      .slice(0, 5)
+      .map(([label, count]) => ({ label, count })),
+  };
+};
+
+const normalizeInsightPayload = ({ skills, demandLevel, careerField, notes }) => {
+  if (!careerField || !demandLevel) {
+    return { error: "careerField and demandLevel are required" };
+  }
+
+  if (!["High", "Medium", "Low"].includes(demandLevel)) {
+    return { error: "Invalid demandLevel value" };
+  }
+
+  const normalizedCareerField = String(careerField).trim();
+  if (!normalizedCareerField) {
+    return { error: "careerField is required" };
+  }
+
+  const normalizedSkills = Array.isArray(skills)
+    ? Array.from(new Set(skills.map((skill) => String(skill).trim()).filter(Boolean)))
+    : [];
+
+  return {
+    data: {
+      skills: normalizedSkills,
+      demandLevel,
+      careerField: normalizedCareerField,
+      notes: String(notes || "").trim(),
+    },
+  };
 };
 
 export const getCandidates = async (req, res) => {
@@ -260,30 +350,117 @@ export const sendInterviewInvite = async (req, res) => {
   }
 };
 
-export const submitMarketInsights = async (req, res) => {
+export const downloadCandidateCv = async (req, res) => {
   try {
-    const { skills, demandLevel, careerField, notes } = req.body;
-    if (!careerField || !demandLevel) {
-      return res
-        .status(400)
-        .json({ message: "careerField and demandLevel are required" });
+    const profile = await StudentProfile.findById(req.params.profileId).populate(
+      "user",
+      "role"
+    );
+
+    if (!profile || profile.user?.role !== "student") {
+      return res.status(404).json({ message: "Candidate not found" });
     }
 
-    if (!["High", "Medium", "Low"].includes(demandLevel)) {
-      return res.status(400).json({ message: "Invalid demandLevel value" });
+    if (!profile.cvFilePath) {
+      return res.status(404).json({ message: "CV file not found for this candidate" });
+    }
+
+    const absolutePath = path.resolve(__dirname, "../../", profile.cvFilePath);
+    if (!fs.existsSync(absolutePath)) {
+      return res.status(404).json({ message: "CV file is unavailable" });
+    }
+
+    return res.download(absolutePath, profile.cvName || path.basename(absolutePath));
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const submitMarketInsights = async (req, res) => {
+  try {
+    const normalized = normalizeInsightPayload(req.body);
+    if (normalized.error) {
+      return res.status(400).json({ message: normalized.error });
     }
 
     const insight = await MarketInsight.create({
       employer: req.user.id,
-      skills: Array.isArray(skills) ? skills : [],
-      demandLevel,
-      careerField,
-      notes: notes || "",
+      ...normalized.data,
     });
 
     return res.status(201).json({
       message: "Market insight submitted",
       insight,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const updateMarketInsight = async (req, res) => {
+  try {
+    const normalized = normalizeInsightPayload(req.body);
+    if (normalized.error) {
+      return res.status(400).json({ message: normalized.error });
+    }
+
+    const insight = await MarketInsight.findOneAndUpdate(
+      { _id: req.params.insightId, employer: req.user.id },
+      { $set: normalized.data },
+      { new: true }
+    );
+
+    if (!insight) {
+      return res.status(404).json({ message: "Insight not found" });
+    }
+
+    return res.status(200).json({
+      message: "Market insight updated",
+      insight,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const deleteMarketInsight = async (req, res) => {
+  try {
+    const deletedInsight = await MarketInsight.findOneAndDelete({
+      _id: req.params.insightId,
+      employer: req.user.id,
+    });
+
+    if (!deletedInsight) {
+      return res.status(404).json({ message: "Insight not found" });
+    }
+
+    return res.status(200).json({ message: "Market insight deleted" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const getMarketInsights = async (req, res) => {
+  try {
+    const insights = await MarketInsight.find()
+      .populate("employer", "fullName")
+      .sort({ createdAt: -1 })
+      .limit(100);
+
+    const recentInsights = insights.slice(0, 8).map((insight) => mapInsight(insight, req.user.id));
+    const myRecentInsights = insights
+      .filter((insight) => String(insight.employer?._id || insight.employer) === String(req.user.id))
+      .slice(0, 5)
+      .map((insight) => mapInsight(insight, req.user.id));
+
+    return res.status(200).json({
+      summary: buildMarketSummary(insights),
+      recentInsights,
+      myRecentInsights,
     });
   } catch (error) {
     console.error(error);

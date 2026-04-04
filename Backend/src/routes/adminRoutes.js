@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   approveStudentProfile,
   createAdminCourse,
+  downloadStudentCv,
   getAdminOverview,
   getAdminCourses,
   getAllStudentProfiles,
@@ -18,6 +19,7 @@ router.use(protect, authorizeRoles("admin"));
 router.get("/overview", getAdminOverview);
 router.get("/students", getAllStudentProfiles);
 router.get("/students/:profileId", getStudentProfileById);
+router.get("/students/:profileId/cv", downloadStudentCv);
 router.patch("/students/:profileId/status", updateStudentProfileStatus);
 router.patch("/students/:profileId/approve", approveStudentProfile);
 router.patch("/students/:profileId/request-update", requestStudentProfileUpdate);

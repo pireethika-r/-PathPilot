@@ -5,6 +5,7 @@ import {
   CheckCircleIcon,
   DownloadIcon,
   PlayCircleIcon,
+  Share2Icon,
   TrophyIcon
 } from 'lucide-react';
 import { Badge } from '../components/Badge';
@@ -13,6 +14,31 @@ const getBadgeIcon = (iconKey) => {
   if (iconKey === 'high_performer') return TrophyIcon;
   if (iconKey === 'multi_course') return AwardIcon;
   return CheckCircleIcon;
+};
+
+const getBadgeCardTheme = (badge) => {
+  if (badge.iconKey === 'high_performer') {
+    return {
+      shell: 'bg-[radial-gradient(circle_at_top,_#faf5ff,_#ede9fe_55%,_#ddd6fe)] border-violet-200',
+      orb: 'bg-violet-600 text-white',
+      ribbon: 'bg-violet-600 text-white',
+      accent: 'text-violet-700'
+    };
+  }
+  if (badge.iconKey === 'multi_course') {
+    return {
+      shell: 'bg-[radial-gradient(circle_at_top,_#f0fdfa,_#ccfbf1_55%,_#99f6e4)] border-teal-200',
+      orb: 'bg-teal-600 text-white',
+      ribbon: 'bg-teal-600 text-white',
+      accent: 'text-teal-700'
+    };
+  }
+  return {
+    shell: 'bg-[radial-gradient(circle_at_top,_#fffbeb,_#fef3c7_55%,_#fde68a)] border-amber-200',
+    orb: 'bg-amber-600 text-white',
+    ribbon: 'bg-amber-600 text-white',
+    accent: 'text-amber-700'
+  };
 };
 
 export function LearningDashboard() {
@@ -29,6 +55,8 @@ export function LearningDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [apiError, setApiError] = useState('');
   const [activeEnrollmentId, setActiveEnrollmentId] = useState('');
+  const [activeBadgeId, setActiveBadgeId] = useState('');
+  const [badgeNotice, setBadgeNotice] = useState('');
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('token');
@@ -79,6 +107,12 @@ export function LearningDashboard() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (!badgeNotice) return;
+    const timer = setTimeout(() => setBadgeNotice(''), 4000);
+    return () => clearTimeout(timer);
+  }, [badgeNotice]);
+
   const handleProgressUpdate = async (enrollment) => {
     setActiveEnrollmentId(enrollment.enrollmentId);
     setApiError('');
@@ -98,6 +132,7 @@ export function LearningDashboard() {
       );
 
       if (Array.isArray(data.newBadges) && data.newBadges.length > 0) {
+        setBadgeNotice(`Badge collected: ${data.newBadges[0].title}`);
         await loadDashboard();
       }
     } catch (error) {
@@ -141,6 +176,85 @@ export function LearningDashboard() {
       setApiError(error.message || 'Failed to download certificate');
     } finally {
       setActiveEnrollmentId('');
+    }
+  };
+
+  const fetchBadgeFile = async (badge) => {
+    const response = await fetch(`/api/learning/badges/${badge.id}/download`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`
+      }
+    });
+
+    if (!response.ok) {
+      let errorMessage = 'Failed to download badge';
+      try {
+        const data = await response.json();
+        errorMessage = data.message || errorMessage;
+      } catch (_error) {
+        // ignored
+      }
+      throw new Error(errorMessage);
+    }
+
+    return response.blob();
+  };
+
+  const handleDownloadBadge = async (badge) => {
+    setActiveBadgeId(badge.id);
+    setApiError('');
+    try {
+      const blob = await fetchBadgeFile(badge);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${badge.badgeKey || 'badge'}-badge.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      setApiError(error.message || 'Failed to download badge');
+    } finally {
+      setActiveBadgeId('');
+    }
+  };
+
+  const handleShareBadge = async (badge) => {
+    setActiveBadgeId(badge.id);
+    setApiError('');
+    try {
+      const shareText = `${badge.title} - ${badge.description}. Earned ${badge.earnedDate} on PathPilo.`;
+      const blob = await fetchBadgeFile(badge);
+      const file = new File([blob], `${badge.badgeKey || 'badge'}-badge.pdf`, {
+        type: 'application/pdf'
+      });
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: badge.title,
+          text: shareText,
+          files: [file]
+        });
+        setBadgeNotice(`Badge shared: ${badge.title}`);
+      } else if (navigator.share) {
+        await navigator.share({
+          title: badge.title,
+          text: shareText
+        });
+        setBadgeNotice(`Badge shared: ${badge.title}`);
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareText);
+        setBadgeNotice(`Badge text copied: ${badge.title}`);
+      } else {
+        throw new Error('Sharing is not supported on this device.');
+      }
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        setApiError(error.message || 'Failed to share badge');
+      }
+    } finally {
+      setActiveBadgeId('');
     }
   };
 
@@ -190,6 +304,12 @@ export function LearningDashboard() {
         </div>
       )}
 
+      {badgeNotice && (
+        <div className="mb-6 p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-sm">
+          {badgeNotice}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
           <h3 className="text-lg font-semibold text-slate-900 flex items-center">
@@ -218,9 +338,17 @@ export function LearningDashboard() {
                     </div>
                     <p className="text-xs text-slate-500 mb-4">Last accessed: {course.lastAccessed}</p>
                     {course.status === 'Completed' && (
-                      <p className="text-xs text-green-700 mb-3">
-                        Certificate: {course.certificateId || 'Issued'} {course.completedAt ? `- ${course.completedAt}` : ''}
-                      </p>
+                      <div className="mb-3 space-y-2">
+                        <p className="text-xs text-green-700">
+                          Certificate: {course.certificateId || 'Issued'} {course.completedAt ? `- ${course.completedAt}` : ''}
+                        </p>
+                        {course.earnedBadge && (
+                          <div className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
+                            <TrophyIcon className="w-3.5 h-3.5 mr-1.5" />
+                            Badge Collected: {course.earnedBadge.title}
+                          </div>
+                        )}
+                      </div>
                     )}
 
                     <div className="w-full">
@@ -270,6 +398,9 @@ export function LearningDashboard() {
             <h3 className="text-lg font-semibold text-slate-900 flex items-center mb-6">
               <TrophyIcon className="w-5 h-5 mr-2 text-amber-500" /> Achievements
             </h3>
+            <p className="text-sm text-slate-600 mb-4">
+              Complete enrolled courses to collect your badges here.
+            </p>
 
             <div className="space-y-4">
               {badges.length === 0 ? (
@@ -277,19 +408,53 @@ export function LearningDashboard() {
               ) : (
                 badges.map((badge) => {
                   const Icon = getBadgeIcon(badge.iconKey);
+                  const theme = getBadgeCardTheme(badge);
                   return (
                     <div
                       key={badge.id}
-                      className="flex items-center p-3 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors"
+                      className={`relative overflow-hidden p-4 rounded-2xl border shadow-sm transition-transform hover:-translate-y-0.5 ${theme.shell}`}
                     >
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center mr-4 ${badge.color}`}>
-                        <Icon className="w-6 h-6" />
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-white/30 rounded-full blur-2xl" />
+                      <div className="relative flex items-center">
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mr-4 shadow-lg ${theme.orb}`}>
+                          <Icon className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <div className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold tracking-[0.18em] ${theme.ribbon}`}>
+                            VERIFIED BADGE
+                          </div>
+                          <h4 className="text-sm font-bold text-slate-900 mt-2">{badge.title}</h4>
+                          <p className="text-xs text-slate-600">Earned {badge.earnedDate}</p>
+                        </div>
+                        <CheckCircleIcon className="w-5 h-5 text-green-500 ml-auto opacity-50" />
                       </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-slate-900">{badge.title}</h4>
-                        <p className="text-xs text-slate-500">Earned {badge.earnedDate}</p>
+                      <p className={`text-xs mt-4 ${theme.accent}`}>{badge.description}</p>
+                      <div className="mt-4 rounded-xl border border-white/60 bg-white/60 px-3 py-2">
+                        <div className="flex items-center justify-between text-[11px] text-slate-600">
+                          <span>Badge Asset</span>
+                          <span className="font-semibold text-slate-900">Creative PDF</span>
+                        </div>
                       </div>
-                      <CheckCircleIcon className="w-5 h-5 text-green-500 ml-auto opacity-50" />
+                      <div className="flex gap-2 mt-4">
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadBadge(badge)}
+                          disabled={activeBadgeId === badge.id}
+                          className="inline-flex items-center px-3 py-2 rounded-xl bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 disabled:opacity-70"
+                        >
+                          <DownloadIcon className="w-3.5 h-3.5 mr-1.5" />
+                          {activeBadgeId === badge.id ? 'Working...' : 'Download'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleShareBadge(badge)}
+                          disabled={activeBadgeId === badge.id}
+                          className="inline-flex items-center px-3 py-2 rounded-xl bg-white/80 text-slate-900 text-xs font-medium border border-white hover:bg-white disabled:opacity-70"
+                        >
+                          <Share2Icon className="w-3.5 h-3.5 mr-1.5" />
+                          Share
+                        </button>
+                      </div>
                     </div>
                   );
                 })

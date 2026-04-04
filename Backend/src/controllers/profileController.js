@@ -1,4 +1,7 @@
 import { StudentProfile } from "../models/StudentProfile.js";
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const PREDEFINED_SKILLS = [
   "JavaScript",
@@ -12,6 +15,10 @@ const PREDEFINED_SKILLS = [
   "AWS",
   "Docker",
 ];
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const CV_STORAGE_DIR = path.resolve(__dirname, "../../uploads/cvs");
 
 const allowedFields = [
   "fullName",
@@ -33,9 +40,68 @@ const allowedFields = [
   "cvName",
   "cvSize",
   "cvType",
+  "cvFilePath",
   "profileScore",
   "status",
 ];
+
+const allowedCvTypes = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+];
+
+const getExtensionFromMimeType = (mimeType) => {
+  if (mimeType === "application/pdf") return ".pdf";
+  if (mimeType === "application/msword") return ".doc";
+  if (
+    mimeType ===
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  ) {
+    return ".docx";
+  }
+  return "";
+};
+
+const sanitizeFileStem = (value) =>
+  String(value || "cv")
+    .replace(/\.[^/.]+$/, "")
+    .replace(/[^a-zA-Z0-9-_]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80) || "cv";
+
+const ensureCvStorageDir = async () => {
+  await fs.mkdir(CV_STORAGE_DIR, { recursive: true });
+};
+
+const saveCvFile = async ({ userId, cvName, cvType, cvBase64 }) => {
+  const base64Content = String(cvBase64 || "").trim();
+  if (!base64Content) return "";
+
+  const fileBuffer = Buffer.from(base64Content, "base64");
+  const extension = getExtensionFromMimeType(cvType);
+  const safeName = sanitizeFileStem(cvName);
+  const storedFileName = `${String(userId)}-${Date.now()}-${safeName}${extension}`;
+
+  await ensureCvStorageDir();
+  await fs.writeFile(path.join(CV_STORAGE_DIR, storedFileName), fileBuffer);
+
+  return path.join("uploads", "cvs", storedFileName).replace(/\\/g, "/");
+};
+
+const removeStoredCvFile = async (relativePath) => {
+  if (!relativePath) return;
+
+  const absolutePath = path.resolve(__dirname, "../../", relativePath);
+  try {
+    await fs.unlink(absolutePath);
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+};
 
 const pickPayload = (body) =>
   allowedFields.reduce((acc, field) => {
@@ -72,6 +138,37 @@ const computeProfileScore = (payload) => {
   return Math.round((filledCount / totalFields) * 100);
 };
 
+const validateDob = (value) => {
+  if (!value) {
+    return "";
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return "Date of Birth must be a valid date";
+  }
+
+  const dob = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(dob.getTime())) {
+    return "Date of Birth must be a valid date";
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  if (dob > today) {
+    return "Date of Birth cannot be in the future";
+  }
+
+  const minimumDob = new Date(today);
+  minimumDob.setFullYear(minimumDob.getFullYear() - 16);
+
+  if (dob > minimumDob) {
+    return "Student must be at least 16 years old";
+  }
+
+  return "";
+};
+
 export const getMyProfile = async (req, res) => {
   try {
     const profile = await StudentProfile.findOne({ user: req.user.id });
@@ -80,7 +177,12 @@ export const getMyProfile = async (req, res) => {
       return res.status(404).json({ message: "Profile not found" });
     }
 
-    return res.status(200).json({ profile });
+    return res.status(200).json({
+      profile: {
+        ...profile.toObject(),
+        hasCvFile: Boolean(profile.cvFilePath),
+      },
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Internal server error" });
@@ -90,6 +192,7 @@ export const getMyProfile = async (req, res) => {
 export const upsertMyProfile = async (req, res) => {
   try {
     const payload = pickPayload(req.body);
+    const cvBase64 = req.body.cvBase64;
 
     if (!payload.fullName || !payload.email || !payload.university || !payload.degree) {
       return res.status(400).json({
@@ -99,6 +202,11 @@ export const upsertMyProfile = async (req, res) => {
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) {
       return res.status(400).json({ message: "Invalid email format" });
+    }
+
+    const dobError = validateDob(payload.dob);
+    if (dobError) {
+      return res.status(400).json({ message: dobError });
     }
 
     if (payload.skills && !Array.isArray(payload.skills)) {
@@ -115,12 +223,6 @@ export const upsertMyProfile = async (req, res) => {
     }
 
     if (payload.cvType) {
-      const allowedCvTypes = [
-        "application/pdf",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      ];
-
       if (!allowedCvTypes.includes(payload.cvType)) {
         return res
           .status(400)
@@ -145,6 +247,26 @@ export const upsertMyProfile = async (req, res) => {
     payload.profileScore = profileScore;
     payload.status = profileScore >= 70 ? "Complete" : "Incomplete";
 
+    const existingProfile = await StudentProfile.findOne({ user: req.user.id });
+
+    if (cvBase64) {
+      if (!payload.cvName || !payload.cvType) {
+        return res.status(400).json({ message: "CV name and type are required" });
+      }
+      payload.cvFilePath = await saveCvFile({
+        userId: req.user.id,
+        cvName: payload.cvName,
+        cvType: payload.cvType,
+        cvBase64,
+      });
+      await removeStoredCvFile(existingProfile?.cvFilePath);
+    } else if (existingProfile?.cvFilePath && payload.cvName) {
+      payload.cvFilePath = existingProfile.cvFilePath;
+    } else if (!payload.cvName) {
+      payload.cvFilePath = "";
+      await removeStoredCvFile(existingProfile?.cvFilePath);
+    }
+
     const profile = await StudentProfile.findOneAndUpdate(
       { user: req.user.id },
       { $set: payload, $setOnInsert: { user: req.user.id } },
@@ -153,7 +275,10 @@ export const upsertMyProfile = async (req, res) => {
 
     return res.status(200).json({
       message: "Profile saved successfully",
-      profile,
+      profile: {
+        ...profile.toObject(),
+        hasCvFile: Boolean(profile.cvFilePath),
+      },
     });
   } catch (error) {
     console.error(error);

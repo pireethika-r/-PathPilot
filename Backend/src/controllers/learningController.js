@@ -208,7 +208,7 @@ const getLastAccessedLabel = (dateValue) => {
   return `${weeks} weeks ago`;
 };
 
-const mapEnrollmentForDashboard = (enrollment) => ({
+const mapEnrollmentForDashboard = (enrollment, badgeMap = new Map()) => ({
   enrollmentId: String(enrollment._id),
   courseId: enrollment.courseId,
   title: enrollment.courseName,
@@ -227,6 +227,7 @@ const mapEnrollmentForDashboard = (enrollment) => ({
   completedAt: enrollment.certificateIssuedAt
     ? formatDateLabel(enrollment.certificateIssuedAt)
     : null,
+  earnedBadge: badgeMap.get(`course_complete_${enrollment.courseId}`) || null,
 });
 
 const createBadgeIfMissing = async (userId, badge) => {
@@ -745,17 +746,21 @@ export const getLearningDashboard = async (req, res) => {
         issuedAt: formatDateLabel(item.certificateIssuedAt),
       }));
 
+    const mappedBadges = badges.map((badge) => ({
+      id: String(badge._id),
+      badgeKey: badge.badgeKey,
+      iconKey: resolveBadgeIconKey(badge.badgeKey),
+      title: badge.title,
+      description: badge.description,
+      color: badge.color,
+      earnedDate: formatDateLabel(badge.earnedAt),
+    }));
+
+    const badgeMap = new Map(mappedBadges.map((badge) => [badge.badgeKey, badge]));
+
     return res.status(200).json({
-      enrollments: enrollments.map(mapEnrollmentForDashboard),
-      badges: badges.map((badge) => ({
-        id: String(badge._id),
-        badgeKey: badge.badgeKey,
-        iconKey: resolveBadgeIconKey(badge.badgeKey),
-        title: badge.title,
-        description: badge.description,
-        color: badge.color,
-        earnedDate: formatDateLabel(badge.earnedAt),
-      })),
+      enrollments: enrollments.map((enrollment) => mapEnrollmentForDashboard(enrollment, badgeMap)),
+      badges: mappedBadges,
       metrics: {
         totalCourses: enrollments.length,
         completedCourses,
@@ -766,6 +771,196 @@ export const getLearningDashboard = async (req, res) => {
       },
       certificates,
     });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const getPaymentHistory = async (req, res) => {
+  try {
+    const payments = await Payment.find({ user: req.user.id }).sort({ paidAt: -1, createdAt: -1 });
+
+    return res.status(200).json({
+      payments: payments.map((payment) => ({
+        id: String(payment._id),
+        receiptNumber: payment.receiptNumber,
+        transactionId: payment.transactionId,
+        method: payment.method,
+        status: payment.status,
+        amountPaid: Number(payment.amountPaid || 0),
+        subtotal: Number(payment.subtotal || 0),
+        totalDiscount: Number(payment.totalDiscount || 0),
+        courseIds: Array.isArray(payment.courseIds) ? payment.courseIds : [],
+        paidAt: payment.paidAt,
+      })),
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const downloadBadge = async (req, res) => {
+  try {
+    const badge = await AchievementBadge.findOne({
+      _id: req.params.badgeId,
+      user: req.user.id,
+    });
+
+    if (!badge) {
+      return res.status(404).json({ message: "Badge not found." });
+    }
+
+    const user = await User.findById(req.user.id);
+    const studentName = user?.fullName || "Student";
+    const earnedDate = formatDateLabel(badge.earnedAt || new Date());
+    const safeBadgeKey = String(badge.badgeKey || "badge").replace(/[^a-zA-Z0-9_-]/g, "");
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${safeBadgeKey}-badge.pdf"`
+    );
+
+    const badgeKey = String(badge.badgeKey || "");
+    const theme = badgeKey.includes("high_performer")
+      ? {
+          primary: "#7c3aed",
+          secondary: "#c4b5fd",
+          accent: "#f5f3ff",
+          ribbon: "ELITE PERFORMANCE",
+        }
+      : badgeKey.includes("multi_course")
+        ? {
+            primary: "#0f766e",
+            secondary: "#99f6e4",
+            accent: "#f0fdfa",
+            ribbon: "MILESTONE ACHIEVEMENT",
+          }
+        : {
+            primary: "#b45309",
+            secondary: "#fde68a",
+            accent: "#fffbeb",
+            ribbon: "COURSE ACHIEVEMENT",
+          };
+
+    const creativeDoc = new PDFDocument({ size: "A4", margin: 50 });
+    creativeDoc.pipe(res);
+
+    creativeDoc.rect(0, 0, 595, 842).fill("#f8fafc");
+    creativeDoc.rect(24, 24, 547, 794).lineWidth(2).stroke(theme.primary);
+    creativeDoc.roundedRect(40, 40, 515, 762, 30).fillAndStroke(theme.accent, theme.secondary);
+
+    creativeDoc.circle(297.5, 160, 78).fill(theme.secondary);
+    creativeDoc.circle(297.5, 160, 62).fill("#ffffff");
+    creativeDoc.circle(297.5, 160, 48).fill(theme.primary);
+    creativeDoc.fillColor("#ffffff").fontSize(30).text("PP", 0, 147, { align: "center" });
+
+    creativeDoc.roundedRect(155, 248, 285, 36, 18).fill(theme.primary);
+    creativeDoc.fillColor("#ffffff").fontSize(12).text(theme.ribbon, 0, 260, { align: "center" });
+
+    creativeDoc.fontSize(30).fillColor("#0f172a").text("PathPilo Digital Badge", 0, 318, {
+      align: "center",
+    });
+    creativeDoc.fontSize(25).fillColor(theme.primary).text(badge.title, 92, 374, {
+      align: "center",
+      width: 410,
+    });
+    creativeDoc.fontSize(13).fillColor("#64748b").text("Awarded to", 0, 444, {
+      align: "center",
+    });
+    creativeDoc.fontSize(24).fillColor("#111827").text(studentName, 0, 466, {
+      align: "center",
+    });
+    creativeDoc.fontSize(14).fillColor("#475569").text(
+      badge.description || "Achievement unlocked on PathPilo.",
+      102,
+      522,
+      { align: "center", width: 392 }
+    );
+
+    creativeDoc.roundedRect(96, 618, 403, 96, 20).fillAndStroke("#ffffff", theme.secondary);
+    creativeDoc.fillColor(theme.primary).fontSize(12).text(`Badge ID: ${badge.badgeKey}`, 122, 643, {
+      align: "left",
+    });
+    creativeDoc.fillColor(theme.primary).fontSize(12).text(`Earned Date: ${earnedDate}`, 122, 669, {
+      align: "left",
+    });
+    creativeDoc.fillColor(theme.primary).fontSize(12).text("Status: Verified Achievement", 122, 695, {
+      align: "left",
+    });
+
+    creativeDoc.roundedRect(414, 636, 58, 58, 18).fill(theme.primary);
+    creativeDoc.fillColor("#ffffff").fontSize(18).text("01", 0, 655, { align: "center" });
+
+    creativeDoc.fontSize(11).fillColor("#6b7280").text("Creative digital badge issued by PathPilo.", 0, 754, {
+      align: "center",
+    });
+
+    creativeDoc.end();
+    return;
+
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    doc.pipe(res);
+
+    doc.rect(20, 20, 555, 802).lineWidth(2).stroke("#f59e0b");
+    doc.roundedRect(45, 45, 505, 732, 24).fillAndStroke("#fffbeb", "#fde68a");
+
+    doc
+      .circle(297.5, 170, 58)
+      .fillAndStroke("#fef3c7", "#f59e0b");
+    doc
+      .fontSize(38)
+      .fillColor("#b45309")
+      .text("★", 0, 148, { align: "center" });
+
+    doc.moveDown(6);
+    doc.fontSize(16).fillColor("#d97706").text("PathPilo Achievement Badge", {
+      align: "center",
+    });
+    doc.moveDown(1);
+    doc.fontSize(30).fillColor("#0f172a").text(badge.title, {
+      align: "center",
+    });
+    doc.moveDown(1);
+    doc.fontSize(15).fillColor("#475569").text("Awarded to", {
+      align: "center",
+    });
+    doc.moveDown(0.6);
+    doc.fontSize(24).fillColor("#111827").text(studentName, {
+      align: "center",
+    });
+    doc.moveDown(0.8);
+    doc.fontSize(14).fillColor("#475569").text(badge.description || "Achievement unlocked on PathPilo.", {
+      align: "center",
+      width: 420,
+      x: 95,
+    });
+
+    doc.moveDown(2);
+    doc.roundedRect(110, 470, 375, 110, 16).fillAndStroke("#ffffff", "#fcd34d");
+    doc
+      .fillColor("#92400e")
+      .fontSize(13)
+      .text(`Badge ID: ${badge.badgeKey}`, 130, 500, { align: "left" });
+    doc
+      .fillColor("#92400e")
+      .fontSize(13)
+      .text(`Earned Date: ${earnedDate}`, 130, 530, { align: "left" });
+    doc
+      .fillColor("#92400e")
+      .fontSize(13)
+      .text("Status: Verified Achievement", 130, 560, { align: "left" });
+
+    doc
+      .fontSize(12)
+      .fillColor("#6b7280")
+      .text("This badge is issued digitally by PathPilo.", 0, 700, {
+        align: "center",
+      });
+
+    doc.end();
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Internal server error" });

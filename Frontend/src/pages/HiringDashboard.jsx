@@ -12,7 +12,10 @@ import {
   LayoutGridIcon,
   ListIcon,
   AlertCircleIcon,
-  SparklesIcon
+  SparklesIcon,
+  DownloadIcon,
+  PencilIcon,
+  Trash2Icon
 } from 'lucide-react';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
@@ -20,7 +23,17 @@ import { Modal } from '../components/Modal';
 export function HiringDashboard() {
   const [candidates, setCandidates] = useState([]);
   const [allSkills, setAllSkills] = useState([]);
+  const [marketSummary, setMarketSummary] = useState({
+    totalInsights: 0,
+    totalEmployers: 0,
+    demandBreakdown: { High: 0, Medium: 0, Low: 0 },
+    topSkills: [],
+    topCareerFields: []
+  });
+  const [recentInsights, setRecentInsights] = useState([]);
+  const [myRecentInsights, setMyRecentInsights] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingInsights, setIsLoadingInsights] = useState(true);
   const [apiError, setApiError] = useState('');
   const [viewMode, setViewMode] = useState('grid');
 
@@ -40,6 +53,9 @@ export function HiringDashboard() {
   const [insightField, setInsightField] = useState('');
   const [insightNotes, setInsightNotes] = useState('');
   const [isSubmittingInsight, setIsSubmittingInsight] = useState(false);
+  const [insightNotice, setInsightNotice] = useState('');
+  const [editingInsightId, setEditingInsightId] = useState('');
+  const [activeInsightId, setActiveInsightId] = useState('');
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('token');
@@ -102,15 +118,54 @@ export function HiringDashboard() {
     }
   };
 
+  const loadMarketInsights = async () => {
+    setIsLoadingInsights(true);
+
+    try {
+      const response = await fetch('/api/hiring/insights', {
+        headers: getAuthHeaders()
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to load market insights');
+      }
+
+      setMarketSummary(data.summary || {
+        totalInsights: 0,
+        totalEmployers: 0,
+        demandBreakdown: { High: 0, Medium: 0, Low: 0 },
+        topSkills: [],
+        topCareerFields: []
+      });
+      setRecentInsights(data.recentInsights || []);
+      setMyRecentInsights(data.myRecentInsights || []);
+    } catch (error) {
+      setApiError(error.message || 'Failed to load market insights');
+    } finally {
+      setIsLoadingInsights(false);
+    }
+  };
+
   useEffect(() => {
     loadCandidates();
   }, [searchTerm, skillFilter, scoreFilter, matchFilter, certFilter]);
+
+  useEffect(() => {
+    loadMarketInsights();
+  }, []);
 
   useEffect(() => {
     if (!inviteNotice) return;
     const timer = setTimeout(() => setInviteNotice(null), 4500);
     return () => clearTimeout(timer);
   }, [inviteNotice]);
+
+  useEffect(() => {
+    if (!insightNotice) return;
+    const timer = setTimeout(() => setInsightNotice(''), 3500);
+    return () => clearTimeout(timer);
+  }, [insightNotice]);
 
   const stats = useMemo(() => {
     const totalCandidates = candidates.length;
@@ -138,6 +193,22 @@ export function HiringDashboard() {
     if (score >= 80) return 'success';
     if (score >= 60) return 'warning';
     return 'danger';
+  };
+
+  const getDemandBadgeVariant = (level) => {
+    if (level === 'High') return 'success';
+    if (level === 'Medium') return 'warning';
+    return 'neutral';
+  };
+
+  const formatInsightDate = (value) => {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return 'Unknown';
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    }).format(parsed);
   };
 
   const handleShortlistToggle = async (candidate) => {
@@ -200,6 +271,41 @@ export function HiringDashboard() {
     }
   };
 
+  const handleDownloadCv = async (candidate) => {
+    setApiError('');
+
+    try {
+      const response = await fetch(`/api/hiring/candidates/${candidate.profileId}/cv`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`
+        }
+      });
+
+      if (!response.ok) {
+        let message = 'Failed to download CV';
+        try {
+          const data = await response.json();
+          message = data.message || message;
+        } catch (_error) {
+          // Ignore JSON parsing errors for file responses.
+        }
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = candidate.cvName || 'candidate-cv';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      setApiError(error.message || 'Failed to download CV');
+    }
+  };
+
   const handleSubmitInsight = async (e) => {
     e.preventDefault();
     setApiError('');
@@ -211,8 +317,9 @@ export function HiringDashboard() {
         .map((s) => s.trim())
         .filter(Boolean);
 
-      const response = await fetch('/api/hiring/insights', {
-        method: 'POST',
+      const isEditing = Boolean(editingInsightId);
+      const response = await fetch(isEditing ? `/api/hiring/insights/${editingInsightId}` : '/api/hiring/insights', {
+        method: isEditing ? 'PUT' : 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({
           skills,
@@ -228,10 +335,54 @@ export function HiringDashboard() {
       setInsightSkills('');
       setInsightField('');
       setInsightNotes('');
+      setInsightDemand('High');
+      setEditingInsightId('');
+      setInsightNotice(isEditing ? 'Market insight updated' : 'Market insight submitted');
+      await loadMarketInsights();
     } catch (error) {
       setApiError(error.message || 'Failed to submit insight');
     } finally {
       setIsSubmittingInsight(false);
+    }
+  };
+
+  const handleEditInsight = (insight) => {
+    setEditingInsightId(insight.id);
+    setInsightField(insight.careerField || '');
+    setInsightDemand(insight.demandLevel || 'High');
+    setInsightSkills((insight.skills || []).join(', '));
+    setInsightNotes(insight.notes || '');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDeleteInsight = async (insightId) => {
+    const confirmed = window.confirm('Delete this market insight?');
+    if (!confirmed) return;
+
+    setActiveInsightId(insightId);
+    setApiError('');
+
+    try {
+      const response = await fetch(`/api/hiring/insights/${insightId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to delete insight');
+
+      if (editingInsightId === insightId) {
+        setEditingInsightId('');
+        setInsightField('');
+        setInsightDemand('High');
+        setInsightSkills('');
+        setInsightNotes('');
+      }
+      setInsightNotice('Market insight deleted');
+      await loadMarketInsights();
+    } catch (error) {
+      setApiError(error.message || 'Failed to delete insight');
+    } finally {
+      setActiveInsightId('');
     }
   };
 
@@ -264,6 +415,13 @@ export function HiringDashboard() {
         <div className="mb-6 flex items-center px-4 py-3 rounded-lg border bg-red-50 border-red-200 text-red-800">
           <AlertCircleIcon className="w-5 h-5 mr-2" />
           <span className="font-medium text-sm">{apiError}</span>
+        </div>
+      )}
+
+      {insightNotice && (
+        <div className="mb-6 flex items-center px-4 py-3 rounded-lg border bg-emerald-50 border-emerald-200 text-emerald-800">
+          <CheckCircleIcon className="w-5 h-5 mr-2" />
+          <span className="font-medium text-sm">{insightNotice}</span>
         </div>
       )}
 
@@ -415,7 +573,24 @@ export function HiringDashboard() {
       )}
 
       <div className="mt-8 bg-white rounded-xl border border-slate-200 p-6">
-        <h3 className="text-lg font-semibold text-slate-900 mb-4">Employer Market Insights</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-slate-900">Employer Market Insights</h3>
+          {editingInsightId && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditingInsightId('');
+                setInsightField('');
+                setInsightDemand('High');
+                setInsightSkills('');
+                setInsightNotes('');
+              }}
+              className="text-sm font-medium text-slate-600 hover:text-slate-900"
+            >
+              Cancel Edit
+            </button>
+          )}
+        </div>
         <form onSubmit={handleSubmitInsight} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Career Field</label>
@@ -439,10 +614,151 @@ export function HiringDashboard() {
           </div>
           <div className="md:col-span-2 flex justify-end">
             <button type="submit" disabled={isSubmittingInsight} className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-70 disabled:cursor-not-allowed">
-              {isSubmittingInsight ? 'Submitting...' : 'Submit Insight'}
+              {isSubmittingInsight ? (editingInsightId ? 'Updating...' : 'Submitting...') : (editingInsightId ? 'Update Insight' : 'Submit Insight')}
             </button>
           </div>
         </form>
+      </div>
+
+      <div className="mt-8 grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-2 bg-white rounded-xl border border-slate-200 p-6">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Market Snapshot</h3>
+              <p className="text-sm text-slate-500 mt-1">Aggregated demand signals from employer submissions.</p>
+            </div>
+          </div>
+
+          {isLoadingInsights ? (
+            <div className="text-slate-500 text-sm">Loading market insights...</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Total Insights</p>
+                  <p className="text-2xl font-bold text-slate-900 mt-1">{marketSummary.totalInsights}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Employers</p>
+                  <p className="text-2xl font-bold text-slate-900 mt-1">{marketSummary.totalEmployers}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">High Demand</p>
+                  <p className="text-2xl font-bold text-emerald-600 mt-1">{marketSummary.demandBreakdown?.High || 0}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Medium Demand</p>
+                  <p className="text-2xl font-bold text-amber-600 mt-1">{marketSummary.demandBreakdown?.Medium || 0}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900 mb-3">Top Skills in Demand</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {marketSummary.topSkills?.length > 0 ? marketSummary.topSkills.map((item) => (
+                      <Badge key={item.label} variant="neutral">{item.label} ({item.count})</Badge>
+                    )) : <span className="text-sm text-slate-500">No skill demand data yet</span>}
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900 mb-3">Top Career Fields</h4>
+                  <div className="space-y-2">
+                    {marketSummary.topCareerFields?.length > 0 ? marketSummary.topCareerFields.map((item) => (
+                      <div key={item.label} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 bg-slate-50">
+                        <span className="text-sm text-slate-700">{item.label}</span>
+                        <span className="text-sm font-semibold text-slate-900">{item.count}</span>
+                      </div>
+                    )) : <span className="text-sm text-slate-500">No career field trends yet</span>}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-1">My Recent Insights</h3>
+          <p className="text-sm text-slate-500 mb-5">Your latest submissions and demand signals.</p>
+
+          {isLoadingInsights ? (
+            <div className="text-slate-500 text-sm">Loading your insights...</div>
+          ) : myRecentInsights.length === 0 ? (
+            <div className="text-sm text-slate-500">No insights submitted yet.</div>
+          ) : (
+            <div className="space-y-3">
+              {myRecentInsights.map((insight) => (
+                <div key={insight.id} className="rounded-xl border border-slate-200 p-4 bg-slate-50">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-900">{insight.careerField}</p>
+                      <p className="text-xs text-slate-500 mt-1">{formatInsightDate(insight.createdAt)}</p>
+                    </div>
+                    <Badge variant={getDemandBadgeVariant(insight.demandLevel)}>{insight.demandLevel}</Badge>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {insight.skills.length > 0 ? insight.skills.map((skill) => (
+                      <Badge key={skill} variant="neutral" className="text-[10px]">{skill}</Badge>
+                    )) : <span className="text-xs text-slate-500">No skills listed</span>}
+                  </div>
+                  {insight.notes && <p className="text-sm text-slate-600 mt-3">{insight.notes}</p>}
+                  <div className="flex gap-2 mt-4 pt-3 border-t border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => handleEditInsight(insight)}
+                      className="inline-flex items-center px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100"
+                    >
+                      <PencilIcon className="w-3.5 h-3.5 mr-1.5" />
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteInsight(insight.id)}
+                      disabled={activeInsightId === insight.id}
+                      className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-50 text-red-700 text-xs font-medium hover:bg-red-100 disabled:opacity-70"
+                    >
+                      <Trash2Icon className="w-3.5 h-3.5 mr-1.5" />
+                      {activeInsightId === insight.id ? 'Deleting...' : 'Delete'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-8 bg-white rounded-xl border border-slate-200 p-6">
+        <h3 className="text-lg font-semibold text-slate-900 mb-1">Recent Employer Signals</h3>
+        <p className="text-sm text-slate-500 mb-5">Latest demand submissions across the hiring network.</p>
+
+        {isLoadingInsights ? (
+          <div className="text-slate-500 text-sm">Loading recent signals...</div>
+        ) : recentInsights.length === 0 ? (
+          <div className="text-sm text-slate-500">No employer market insights available yet.</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            {recentInsights.map((insight) => (
+              <div key={insight.id} className="rounded-xl border border-slate-200 p-4 bg-gradient-to-br from-white to-slate-50">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-900">{insight.careerField}</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {insight.employerName} • {formatInsightDate(insight.createdAt)}
+                    </p>
+                  </div>
+                  <Badge variant={getDemandBadgeVariant(insight.demandLevel)}>{insight.demandLevel}</Badge>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {insight.skills.length > 0 ? insight.skills.slice(0, 4).map((skill) => (
+                    <Badge key={skill} variant="neutral" className="text-[10px]">{skill}</Badge>
+                  )) : <span className="text-xs text-slate-500">No skills listed</span>}
+                </div>
+                {insight.notes && <p className="text-sm text-slate-600 mt-3">{insight.notes}</p>}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <Modal
@@ -498,7 +814,23 @@ export function HiringDashboard() {
 
             <div>
               <h4 className="text-sm font-semibold text-slate-900 mb-2">CV</h4>
-              <div className="text-sm text-slate-700">{selectedCandidate.cvName || 'No CV uploaded'}</div>
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                <div className="min-w-0">
+                  <div className="text-sm text-slate-700 truncate">{selectedCandidate.cvName || 'No CV uploaded'}</div>
+                  {!selectedCandidate.hasCvFile && selectedCandidate.cvName && (
+                    <div className="text-xs text-amber-700 mt-1">Legacy profile: file is not available for download yet.</div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadCv(selectedCandidate)}
+                  disabled={isProcessing || !selectedCandidate.hasCvFile}
+                  className="inline-flex items-center px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <DownloadIcon className="w-4 h-4 mr-2" />
+                  Download
+                </button>
+              </div>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-200">

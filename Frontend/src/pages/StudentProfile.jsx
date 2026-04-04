@@ -23,6 +23,39 @@ const CAREER_INTERESTS = [
     'UI/UX Design'
 ];
 export function StudentProfile() {
+    const fileToBase64 = (file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = typeof reader.result === 'string' ? reader.result : '';
+            resolve(result.includes(',') ? result.split(',')[1] : result);
+        };
+        reader.onerror = () => reject(new Error('Failed to read CV file'));
+        reader.readAsDataURL(file);
+    });
+    const getTodayDateString = () => new Date().toISOString().split('T')[0];
+    const validateDob = (value) => {
+        if (!value) {
+            return '';
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            return 'Date of Birth must be a valid date';
+        }
+        const dob = new Date(`${value}T00:00:00`);
+        if (Number.isNaN(dob.getTime())) {
+            return 'Date of Birth must be a valid date';
+        }
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (dob > today) {
+            return 'Date of Birth cannot be in the future';
+        }
+        const minimumDob = new Date(today);
+        minimumDob.setFullYear(minimumDob.getFullYear() - 16);
+        if (dob > minimumDob) {
+            return 'Student must be at least 16 years old';
+        }
+        return '';
+    };
     const [formData, setFormData] = useState({
         fullName: '',
         email: '',
@@ -45,6 +78,7 @@ export function StudentProfile() {
     const [skillInput, setSkillInput] = useState('');
     const [isDragging, setIsDragging] = useState(false);
     const [existingCvName, setExistingCvName] = useState('');
+    const [hasExistingCvFile, setHasExistingCvFile] = useState(false);
     const [apiError, setApiError] = useState('');
     const [isLoadingProfile, setIsLoadingProfile] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -85,11 +119,11 @@ export function StudentProfile() {
             filledCount++;
         if (formData.interests.length > 0)
             filledCount++;
-        if (formData.cv || existingCvName)
+        if (formData.cv || hasExistingCvFile)
             filledCount++;
         const totalFields = fieldsToTrack.length + 3; // +3 for skills, interests, cv
         setProgress(filledCount / totalFields * 100);
-    }, [formData, existingCvName]);
+    }, [formData, hasExistingCvFile]);
     useEffect(() => {
         const loadProfile = async () => {
             try {
@@ -127,6 +161,7 @@ export function StudentProfile() {
                     cv: null
                 }));
                 setExistingCvName(profile.cvName || '');
+                setHasExistingCvFile(Boolean(profile.hasCvFile));
             }
             catch (error) {
                 setApiError(error.message || 'Failed to load profile');
@@ -154,6 +189,9 @@ export function StudentProfile() {
                 if (value && (isNaN(Number(value)) || Number(value) < 0 || Number(value) > 4.0)) {
                     error = 'GPA must be between 0.0 and 4.0';
                 }
+                break;
+            case 'dob':
+                error = validateDob(value);
                 break;
             default:
                 break;
@@ -273,6 +311,7 @@ export function StudentProfile() {
             cv: file
         }));
         setExistingCvName('');
+        setHasExistingCvFile(true);
     };
     const onDragOver = (e) => {
         e.preventDefault();
@@ -325,11 +364,13 @@ export function StudentProfile() {
         }
         try {
             setIsSaving(true);
+            const cvBase64 = formData.cv ? await fileToBase64(formData.cv) : '';
             const payload = {
                 ...formData,
                 cvName: formData.cv ? formData.cv.name : existingCvName,
                 cvSize: formData.cv ? formData.cv.size : 0,
-                cvType: formData.cv ? formData.cv.type : ''
+                cvType: formData.cv ? formData.cv.type : '',
+                cvBase64
             };
             delete payload.cv;
             const response = await fetch('/api/profile/me', {
@@ -342,6 +383,11 @@ export function StudentProfile() {
                 throw new Error(data.message || 'Failed to save profile');
             }
             setExistingCvName(data.profile?.cvName || payload.cvName || '');
+            setHasExistingCvFile(Boolean(data.profile?.hasCvFile));
+            setFormData((prev) => ({
+                ...prev,
+                cv: null
+            }));
             setIsSubmitted(true);
             window.scrollTo({
                 top: 0,
@@ -411,7 +457,7 @@ export function StudentProfile() {
                 <span className="text-slate-600">CV Upload</span>
                 <span className={`font-medium ${formData.cv || existingCvName ? 'text-green-600' : 'text-amber-500'}`}>
 
-                  {formData.cv || existingCvName ? 'Uploaded' : 'Missing'}
+                  {formData.cv || hasExistingCvFile ? 'Uploaded' : 'Missing'}
                 </span>
               </div>
             </div>
@@ -483,8 +529,12 @@ export function StudentProfile() {
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 Date of Birth
               </label>
-              <input type="date" name="dob" value={formData.dob} onChange={handleInputChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-500 focus:outline-none transition-colors"/>
-
+              <input type="date" name="dob" value={formData.dob} max={getTodayDateString()} onChange={handleInputChange} onBlur={handleBlur} className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:outline-none transition-colors ${errors.dob ? 'border-red-500 focus:ring-red-200' : 'border-slate-300 focus:ring-blue-200 focus:border-blue-500'}`}/>
+              {errors.dob &&
+            <p className="mt-1 text-sm text-red-500 flex items-center">
+                  <AlertCircleIcon className="w-4 h-4 mr-1"/>
+                  {errors.dob}
+                </p>}
             </div>
 
             <div>
@@ -703,6 +753,10 @@ export function StudentProfile() {
                         cv: null
                     }));
                     setExistingCvName('');
+                    setHasExistingCvFile(false);
+                    if (fileInputRef.current) {
+                        fileInputRef.current.value = '';
+                    }
                 }} className="text-sm text-red-600 hover:text-red-700 font-medium">
 
                     Remove File

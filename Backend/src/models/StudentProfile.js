@@ -27,6 +27,7 @@ const studentProfileSchema = new mongoose.Schema(
     cvName: { type: String, default: "" },
     cvSize: { type: Number, default: 0 },
     cvType: { type: String, default: "" },
+    cvFilePath: { type: String, default: "" },
     profileScore: { type: Number, default: 0, min: 0, max: 100 },
     status: {
       type: String,

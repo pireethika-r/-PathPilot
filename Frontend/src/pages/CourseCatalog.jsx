@@ -104,6 +104,7 @@ export function CourseCatalog() {
   const subtotal = selectedCourseDetails.reduce((sum, course) => sum + course.price, 0);
   const discount = selectedCourses.length > 1 ? subtotal * 0.15 : 0;
   const total = subtotal - discount;
+  const bundleDiscountRate = selectedCourses.length > 1 ? 15 : 0;
 
   const handleStartCheckout = async () => {
     setApiError('');
@@ -181,6 +182,32 @@ export function CourseCatalog() {
             <p className="text-sm text-slate-600 mb-1">Receipt: {paymentResult.payment.receiptNumber}</p>
             <p className="text-sm text-slate-600 mb-1">Transaction: {paymentResult.payment.transactionId}</p>
             <p className="text-sm text-slate-600 mb-4">Method: {paymentResult.payment.paymentMethod}</p>
+            <div className="space-y-3 mb-4">
+              {paymentResult.summary.selectedCourses.map((course) => (
+                <div key={course.id} className="flex justify-between gap-4 text-sm">
+                  <div>
+                    <p className="font-medium text-slate-900">{course.title}</p>
+                    <p className="text-xs text-slate-500">
+                      ${course.price.toFixed(2)}
+                      {course.discount > 0 ? ` - Discount $${course.discount.toFixed(2)}` : ''}
+                    </p>
+                  </div>
+                  <span className="font-medium text-slate-900">${course.finalPrice.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-slate-200 pt-4 space-y-2">
+              <div className="flex justify-between text-sm text-slate-600">
+                <span>Subtotal</span>
+                <span>${paymentResult.summary.subtotal.toFixed(2)}</span>
+              </div>
+              {paymentResult.summary.totalDiscount > 0 && (
+                <div className="flex justify-between text-sm text-green-600">
+                  <span>Bundle Discount ({Math.round(paymentResult.summary.discountRate * 100)}%)</span>
+                  <span>-${paymentResult.summary.totalDiscount.toFixed(2)}</span>
+                </div>
+              )}
+            </div>
             <div className="flex justify-between text-sm font-bold pt-4 border-t border-slate-200">
               <span>Total Paid</span>
               <span>${paymentResult.summary.finalTotal.toFixed(2)}</span>
@@ -264,6 +291,11 @@ export function CourseCatalog() {
                   <div>
                     <p className="text-sm font-medium text-slate-900">{course.title}</p>
                     <p className="text-xs text-slate-500">{course.duration}</p>
+                    {course.discount > 0 && (
+                      <p className="text-xs text-green-600">
+                        ${course.price.toFixed(2)} - Save ${course.discount.toFixed(2)}
+                      </p>
+                    )}
                   </div>
                   <span className="text-sm font-medium text-slate-900">${course.finalPrice.toFixed(2)}</span>
                 </div>
@@ -326,7 +358,11 @@ export function CourseCatalog() {
 
       {selectedCourses.length > 0 && (
         <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700">
-          Estimated total: <strong>${total.toFixed(2)}</strong>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+            <span>Subtotal: <strong>${subtotal.toFixed(2)}</strong></span>
+            {discount > 0 && <span className="text-green-700">Discount: <strong>-${discount.toFixed(2)}</strong></span>}
+            <span>Total: <strong>${total.toFixed(2)}</strong></span>
+          </div>
         </div>
       )}
 
@@ -369,8 +405,25 @@ export function CourseCatalog() {
                       </span>
                     ))}
                   </div>
+                  {bundleDiscountRate > 0 && (
+                    <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+                      <p className="text-xs font-medium text-green-700">
+                        Bundle price: ${(course.price * (1 - bundleDiscountRate / 100)).toFixed(2)}
+                      </p>
+                      <p className="text-[11px] text-green-600">
+                        Save ${(course.price * (bundleDiscountRate / 100)).toFixed(2)} with the current {bundleDiscountRate}% offer
+                      </p>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between mt-auto pt-4 border-t border-slate-100">
-                    <span className="text-xl font-bold text-slate-900">${course.price}</span>
+                    <div>
+                      <span className={`text-xl font-bold ${bundleDiscountRate > 0 ? 'text-slate-500 line-through text-base mr-2' : 'text-slate-900'}`}>${course.price.toFixed(2)}</span>
+                      {bundleDiscountRate > 0 && (
+                        <span className="text-xl font-bold text-green-700">
+                          ${(course.price * (1 - bundleDiscountRate / 100)).toFixed(2)}
+                        </span>
+                      )}
+                    </div>
                     <button
                       onClick={() => toggleCourse(course.id)}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
