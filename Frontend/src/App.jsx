@@ -17,6 +17,7 @@ import CreateCourse from './pages/CreateCourse';
 import CareerForm from './pages/CareerForm';
 import CoursePage from './pages/CoursePage';
 import LearningPlayer from "./pages/LearningPlayer";
+import CreateCourseContent from "./pages/CreateCourseContent";
 
 export function App() {
 
@@ -136,6 +137,7 @@ export function App() {
                     {currentView === 'courses' && <CourseCatalog />}
                     {currentView === 'learning' && <LearningDashboard />}
                     {currentView === 'payments' && <PaymentHistory />}
+                    {currentView === 'create-content' && <CreateCourseContent />}
 
                     {/* ✅ YOUR MODULE */}
                     {currentView === 'career' && (

@@ -17,8 +17,6 @@ const router = express.Router();
  */
 router.post(
   "/",
-  protect,
-  authorizeRoles("admin"),
   createCourseContent
 );
 
@@ -29,7 +27,6 @@ router.post(
  */
 router.get(
   "/:courseId",
-  protect,
   getCourseContent
 );
 

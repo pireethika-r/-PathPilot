@@ -2,21 +2,28 @@ import mongoose from "mongoose";
 
 const lessonSchema = new mongoose.Schema({
   title: String,
-  content: String, // text or video link
+  content: String,
+
+  quiz: [
+    {
+      question: String,
+      options: [String],
+      answer: String
+    }
+  ]
 });
 
 const moduleSchema = new mongoose.Schema({
   title: String,
-  lessons: [lessonSchema],
+  lessons: [lessonSchema]
 });
 
 const courseContentSchema = new mongoose.Schema({
-  courseId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Course",
-    required: true,
-  },
-  modules: [moduleSchema],
+  courseId: String,
+  modules: [moduleSchema]
 });
 
-export const CourseContent = mongoose.model("CourseContent", courseContentSchema);
+export const CourseContent = mongoose.model(
+  "CourseContent",
+  courseContentSchema
+);

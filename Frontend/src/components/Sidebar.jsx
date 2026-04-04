@@ -67,7 +67,13 @@ export function Sidebar({
         id: 'create-course',
         label: 'Create Course',
         icon: BookOpenIcon
-      }
+      },
+
+      {
+    id: 'create-content',
+    label: 'Create Content',
+    icon: BookMarkedIcon
+  }
     ],
 
     hiring: [
