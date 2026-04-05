@@ -153,7 +153,7 @@ export function App() {
 
                     {/* 🎬 LEARNING PLAYER */}
                     {currentView === 'learning-player' && (
-                        <LearningPlayer courseId={selectedCourseId} />
+                        <LearningPlayer selectedCourseId={selectedCourseId} />
                     )}
 
                 </main>

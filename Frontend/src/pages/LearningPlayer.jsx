@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { BookOpen } from "lucide-react";
 
 const LearningPlayer = ({ selectedCourseId }) => {
+  console.log("Course ID:", selectedCourseId); // ✅ ADD HERE
   const [content, setContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
