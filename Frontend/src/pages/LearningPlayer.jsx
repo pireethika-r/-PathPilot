@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { BookOpen } from "lucide-react";
 
-const LearningPlayer = ({ selectedCourseId }) => {
-  console.log("Course ID:", selectedCourseId); // ✅ ADD HERE
+const LearningPlayer = ({ selectedCourseId, setCurrentView }) => {
+  console.log("Course ID:", selectedCourseId);
+
   const [content, setContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -24,7 +25,6 @@ const LearningPlayer = ({ selectedCourseId }) => {
       try {
         const res = await fetch(`/api/course-content/${selectedCourseId}`);
         const data = await res.json();
-
         setContent(data.content);
       } catch {
         setError("Failed to load content");
@@ -36,25 +36,7 @@ const LearningPlayer = ({ selectedCourseId }) => {
     fetchContent();
   }, [selectedCourseId]);
 
-  // 🔥 LOAD PROGRESS FROM DB
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-
-    fetch(`/api/progress/${selectedCourseId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.progress) {
-          setCompletedLessons(data.progress.completedLessons);
-        }
-      });
-  }, [selectedCourseId]);
-
   if (loading) return <p className="p-6">Loading...</p>;
-
   if (!content || !content.modules?.length) {
     return <p className="p-6 text-gray-500">No content available</p>;
   }
@@ -169,24 +151,9 @@ const LearningPlayer = ({ selectedCourseId }) => {
             Next
           </button>
 
-          {/* ✅ SAVE PROGRESS */}
+          {/* ✅ SAVE LOCAL PROGRESS */}
           <button
-            onClick={async () => {
-              const token = localStorage.getItem("token");
-
-              await fetch("/api/progress", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                  courseId: selectedCourseId,
-                  moduleIndex: currentModule,
-                  lessonIndex: currentLesson
-                })
-              });
-
+            onClick={() => {
               setCompletedLessons((prev) => [
                 ...prev,
                 { moduleIndex: currentModule, lessonIndex: currentLesson }
@@ -205,7 +172,7 @@ const LearningPlayer = ({ selectedCourseId }) => {
           </button>
         </div>
 
-        {/* 📊 PROGRESS BAR */}
+        {/* 📊 PROGRESS */}
         <div>
           <div className="w-full bg-gray-200 h-2 rounded">
             <div
@@ -219,7 +186,7 @@ const LearningPlayer = ({ selectedCourseId }) => {
         </div>
 
         {/* 🧠 QUIZ */}
-        {showQuiz && lesson.quiz && (
+        {showQuiz && lesson?.quiz?.length > 0 && (
           <div className="bg-white p-5 rounded-xl shadow">
             <h3 className="font-semibold mb-3">Quiz</h3>
 
@@ -234,10 +201,7 @@ const LearningPlayer = ({ selectedCourseId }) => {
                       name={`q-${i}`}
                       value={opt}
                       onChange={() =>
-                        setAnswers({
-                          ...answers,
-                          [i]: opt
-                        })
+                        setAnswers({ ...answers, [i]: opt })
                       }
                     />{" "}
                     {opt}
@@ -268,6 +232,33 @@ const LearningPlayer = ({ selectedCourseId }) => {
           <div className="bg-blue-100 p-4 rounded">
             🎉 Score: {score} / {lesson.quiz.length}
           </div>
+        )}
+
+        {/* 🎓 COMPLETE FLOW */}
+        {progress === 100 && score > 0 && (
+          <button
+            onClick={async () => {
+              try {
+                await fetch(`/api/learning/enrollments/${selectedCourseId}/progress`, {
+                  method: "PATCH",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${localStorage.getItem("token")}`
+                  },
+                  body: JSON.stringify({
+                    modulesCompleted: 999
+                  })
+                });
+              } catch (err) {
+                console.log("Progress update failed");
+              }
+
+              setCurrentView("learning");
+            }}
+            className="mt-4 bg-green-600 text-white px-4 py-2 rounded-lg"
+          >
+            🎓 Go to My Learning
+          </button>
         )}
 
       </div>

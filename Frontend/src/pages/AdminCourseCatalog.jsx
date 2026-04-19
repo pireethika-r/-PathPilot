@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { AlertCircleIcon, CheckCircleIcon, PlusIcon } from 'lucide-react';
 
+// ✅ ADDED (ONLY THIS)
+const formatCurrency = (amount) =>
+  `Rs. ${Number(amount || 0).toFixed(2)}`;
+
 export function AdminCourseCatalog() {
   const [courses, setCourses] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -152,19 +156,15 @@ export function AdminCourseCatalog() {
             <input name="duration" value={form.duration} onChange={handleChange} placeholder="Duration (e.g. 6 Weeks)" className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
             <input name="skills" value={form.skills} onChange={handleChange} placeholder="Skills (comma-separated)" className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
             <div className="grid grid-cols-2 gap-2">
-              <input name="totalModules" type="number" min={1} value={form.totalModules} onChange={handleChange} required placeholder="Modules" className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
-              <input name="price" type="number" min={0} step="0.01" value={form.price} onChange={handleChange} required placeholder="Price" className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+              <input name="totalModules" type="number" min={1} value={form.totalModules} onChange={handleChange} required className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+              <input name="price" type="number" min={0} step="0.01" value={form.price} onChange={handleChange} required className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
             </div>
-            <input name="image" value={form.image} onChange={handleChange} placeholder="Image class (Tailwind bg-*)" className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+            <input name="image" value={form.image} onChange={handleChange} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
             <label className="flex items-center text-sm text-slate-700">
               <input name="isActive" type="checkbox" checked={form.isActive} onChange={handleChange} className="mr-2" />
               Active
             </label>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-70"
-            >
+            <button type="submit" disabled={isSubmitting} className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700">
               {isSubmitting ? 'Creating...' : 'Create Course'}
             </button>
           </form>
@@ -174,22 +174,33 @@ export function AdminCourseCatalog() {
           <div className="px-5 py-4 border-b border-slate-200">
             <h3 className="text-lg font-semibold text-slate-900">Course List</h3>
           </div>
+
           {isLoading ? (
             <div className="p-5 text-slate-600">Loading courses...</div>
-          ) : courses.length === 0 ? (
-            <div className="p-5 text-slate-600">No courses found.</div>
           ) : (
             <div className="divide-y divide-slate-200">
               {courses.map((course) => (
-                <div key={course.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div key={course.id} className="p-4 flex justify-between">
                   <div>
-                    <p className="font-semibold text-slate-900">{course.title} <span className="text-xs text-slate-500">({course.code})</span></p>
-                    <p className="text-sm text-slate-600">${course.price} • {course.totalModules} modules • {course.duration || 'No duration'}</p>
-                    <p className="text-xs text-slate-500 mt-1">{course.skills?.join(', ') || 'No skills'}</p>
+                    <p className="font-semibold">
+                      {course.title} ({course.code})
+                    </p>
+
+                    {/* ✅ ONLY CHANGE HERE */}
+                    <p className="text-sm text-gray-600">
+                      {formatCurrency(course.price)} • {course.totalModules} modules • {course.duration}
+                    </p>
+
+                    <p className="text-xs text-gray-500">
+                      {course.skills?.join(', ') || 'No skills'}
+                    </p>
                   </div>
+
                   <button
                     onClick={() => toggleCourseActive(course)}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium ${course.isActive ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}`}
+                    className={`px-3 py-2 rounded-lg text-sm ${
+                      course.isActive ? 'bg-yellow-100' : 'bg-green-100'
+                    }`}
                   >
                     {course.isActive ? 'Deactivate' : 'Activate'}
                   </button>

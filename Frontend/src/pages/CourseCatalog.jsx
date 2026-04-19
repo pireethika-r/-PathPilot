@@ -7,6 +7,9 @@ import {
   TagIcon
 } from 'lucide-react';
 
+const formatCurrency = (amount) =>
+  `Rs. ${Number(amount || 0).toFixed(2)}`;
+
 const PAYMENT_METHODS = ['Stripe'];
 
 export function CourseCatalog() {

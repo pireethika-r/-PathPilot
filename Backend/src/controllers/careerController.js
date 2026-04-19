@@ -45,31 +45,10 @@ export const getCoursesByCareer = async (req, res) => {
   try {
     const { career } = req.params;
 
-    let requiredSkills = [];
+    console.log("Requested Career:", career); // debug
 
-    //Career → Skills Mapping
-    switch (career) {
-      case "Software Engineer":
-      case "Web Developer":
-        requiredSkills = ["programming", "javascript"];
-        break;
-
-      case "UI/UX Designer":
-        requiredSkills = ["design", "figma"];
-        break;
-
-      case "Data Analyst":
-        requiredSkills = ["data", "analytics"];
-        break;
-
-      default:
-        requiredSkills = [];
-    }
-
-    // Fetch courses from DB
     const courses = await Course.find({
-      skills: { $in: requiredSkills },
-      isActive: true
+      career: { $in: [career, "Web Developer"] }
     });
 
     res.status(200).json({
@@ -78,10 +57,10 @@ export const getCoursesByCareer = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Course fetch error:", error);
+    console.error("GET COURSES ERROR:", error);
     res.status(500).json({
       success: false,
-      message: "Server error"
+      message: "Error fetching courses"
     });
   }
 };
