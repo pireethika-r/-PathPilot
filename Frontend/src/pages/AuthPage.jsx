@@ -126,7 +126,7 @@ export function AuthPage({ onLogin }) {
         <div className="relative z-10 flex items-center">
           <GraduationCapIcon className="w-10 h-10 text-indigo-400 mr-3"/>
           <span className="text-2xl font-bold text-white tracking-tight">
-            PathPilo
+            PathPilot
           </span>
         </div>
 
@@ -208,7 +208,7 @@ export function AuthPage({ onLogin }) {
 
         {/* Footer */}
         <div className="relative z-10 text-sm text-slate-500 mt-auto pt-12">
-          &copy; {new Date().getFullYear()} PathPilo Inc. All rights reserved.
+          &copy; {new Date().getFullYear()} PathPilot Inc. All rights reserved.
         </div>
       </div>
 
@@ -220,7 +220,7 @@ export function AuthPage({ onLogin }) {
             <GraduationCapIcon className="w-6 h-6 text-white"/>
           </div>
           <span className="text-2xl font-bold text-slate-900 tracking-tight">
-            PathPilo
+            PathPilot
           </span>
         </div>
 
@@ -378,7 +378,7 @@ export function AuthPage({ onLogin }) {
                       Create an account
                     </h2>
                     <p className="text-slate-500">
-                      Join PathPilo to launch your career.
+                      Join PathPilot to launch your career.
                     </p>
                   </div>
 

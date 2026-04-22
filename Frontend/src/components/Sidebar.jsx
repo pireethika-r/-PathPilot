@@ -126,7 +126,7 @@ export function Sidebar({
           {/* Logo */}
           <div className="h-16 flex items-center px-6 border-b border-slate-800">
             <GraduationCapIcon className="w-8 h-8 text-blue-400 mr-3" />
-            <span className="text-xl font-bold tracking-tight">PathPilo</span>
+            <span className="text-xl font-bold tracking-tight">PathPilot</span>
 
             <button
               className="ml-auto lg:hidden text-slate-400 hover:text-white"
