@@ -9,7 +9,7 @@ const paymentSchema = new mongoose.Schema(
       index: true,
     },
     method: {
-      type: String,
+      : String,
       enum: ["Stripe"],
       default: "Stripe",
       required: true,
