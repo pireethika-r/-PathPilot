@@ -43,7 +43,6 @@ const buildInterviewEmailHtml = ({ candidateName, date, time, message }) => `
                   <p style="margin:0 0 8px 0;font-size:14px;font-weight:bold;">Message from Hiring Team</p>
                   <div style="background:#f8fafc;border-left:4px solid #2563eb;padding:12px 14px;border-radius:8px;font-size:14px;line-height:1.6;white-space:pre-line;">
                     ${message}
-                
                   </div>
 
                   <p style="margin:22px 0 0 0;font-size:14px;line-height:1.6;">
