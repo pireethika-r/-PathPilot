@@ -10,7 +10,7 @@ const formatDate = (value) => {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-     'numeric',
+    hour: 'numeric',
     minute: '2-digit'
   }).format(parsed);
 };
