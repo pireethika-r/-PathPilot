@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 const marketInsightSchema = new mongoose.Schema(
+
   {
     employer: {
       type: mongoose.Schema.Types.ObjectId,
